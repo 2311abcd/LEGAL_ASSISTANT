@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nyaya AI – Legal help, drafted in minutes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;1,9..144,500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<canvas id="bg"></canvas>
+<header class="top">
+  <div class="brand"><svg class="scales" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v25M13 35h14M16 32h8"/><circle cx="20" cy="5" r="1.6"/><g class="beam"><path d="M7 10h26"/><path d="M7 10 3 21M7 10l4 11M33 10l-4 11M33 10l4 11"/><path d="M3 21a4 4 0 0 0 8 0zM29 21a4 4 0 0 0 8 0z"/></g></svg><div><h1>Nyaya<em>.AI</em></h1><p>Agentic legal assistant for BNS &amp; BNSS 2023</p></div></div>
+  <div class="helplines"><span>🚨 Cyber <b>1930</b></span><span>Police <b>112</b></span><span>Free legal aid <b>15100</b></span><span>Consumer <b>1915</b></span></div>
+  <div class="session"><i class="dot"></i><code id="tid"></code><button class="ghost" onclick="resetSession()">New case</button></div>
+</header>
+
+<main>
+  <section class="glass pipe" aria-label="Pipeline progress">
+    <div class="track"><div class="fill" id="fill"></div></div>
+    <div class="node"><div class="num">1</div><b>Classify</b><small>Picks the right law base</small></div>
+    <div class="node"><div class="num">2</div><b>Retrieve &amp; audit</b><small>FAISS search, risk check</small></div>
+    <div class="node"><div class="num">3</div><b>Draft</b><small>Writer with live search</small></div>
+    <div class="node"><div class="num">4</div><b>Your review</b><small>Approve or request edits</small></div>
+    <div class="node"><div class="num">5</div><b>Action guide</b><small>Plain-language next steps</small></div>
+  </section>
+
+  <div class="grid">
+    <aside>
+      <div class="glass pad">
+        <h2>What kind of problem is it?</h2>
+        <div class="cats">
+          <button class="cat on" onclick="selCat('BNS Criminal Law',this)"><em>🚨</em><b>Criminal</b><small>FIR, cheating, threats</small></button>
+          <button class="cat" onclick="selCat('Cyber Crime & Fraud',this)"><em>💻</em><b>Cyber fraud</b><small>UPI scam, IT Act</small></button>
+          <button class="cat" onclick="selCat('Consumer & Civil Dispute',this)"><em>🛒</em><b>Consumer</b><small>Refund, defective goods</small></button>
+          <button class="cat" onclick="selCat('Property & Family Law',this)"><em>🏛️</em><b>Property &amp; family</b><small>Tenancy, deposits</small></button>
+        </div>
+        <h2>Tell us what happened</h2>
+        <textarea id="q" rows="6" placeholder="Example: I lost Rs. 45,000 to a UPI fraud and my local police station refuses to register an FIR. What should I do, and which sections of the BNS apply?"></textarea>
+        <div class="meta"><span id="cc">0 characters</span><span>Ctrl + Enter to run</span><button class="link" onclick="clearQ()">Clear</button></div>
+        <div class="chips"><span>Try an example:</span>
+          <button onclick="sample(0)">Cyber fraud, FIR refused</button>
+          <button onclick="sample(1)">Defective laptop</button>
+          <button onclick="sample(2)">Landlord keeps deposit</button>
+        </div>
+        <button id="run" class="run" onclick="startAnalysis()"><span>Analyse my case &amp; draft notice</span></button>
+      </div>
+
+      <details class="glass pad">
+        <summary>Add your own law PDF to the knowledge base</summary>
+        <div class="up">
+          <select id="pdfType"><option value="statutes">Statutes handbook (BNS, IT Act…)</option><option value="procedures">Procedures manual (FIR, courts…)</option></select>
+          <input type="file" id="pdfFile" accept=".pdf">
+          <button class="ghost" onclick="uploadPDF()">Upload &amp; index</button>
+        </div>
+      </details>
+
+      <div class="glass pad"><h2>Agent activity</h2><div id="term" class="term"></div></div>
+    </aside>
+
+    <section class="stage">
+      <div id="empty" class="glass hero">
+        <h2>Describe the problem. <span>Get a court-ready draft.</span></h2>
+        <p>Nyaya AI finds the sections that apply, scores how urgent your case is, drafts the notice, and waits for your approval before writing the final guide.</p>
+        <div class="feats">
+          <div><b>Two knowledge bases</b><span>Statutes and court procedure, searched separately</span></div>
+          <div><b>Live web check</b><span>Verifies portals and judgments while drafting</span></div>
+          <div><b>You stay in control</b><span>Nothing is finalised until you approve</span></div>
+        </div>
+      </div>
+
+      <div id="loader" class="glass loader hidden">
+        <div class="rings"><i></i><i></i><span>⚖️</span></div>
+        <h3 id="lt">Starting…</h3><p id="ls"></p>
+        <div class="bar"><div></div></div>
+      </div>
+
+      <div id="audit" class="hidden">
+        <div class="sh"><h2>Case audit</h2><span class="tag" id="route"></span></div>
+        <div class="acards">
+          <div class="glass acard a1"><h4>📜 Sections that apply</h4><div id="o-sec" class="ab"></div></div>
+          <div class="glass acard a2"><h4>🛡️ Urgency &amp; evidence</h4><div id="o-risk" class="ab"></div></div>
+          <div class="glass acard a3"><h4>🧭 What to do, in order</h4><div id="o-road" class="ab"></div></div>
+        </div>
+      </div>
+
+      <div id="studio" class="glass pad hidden">
+        <div class="sh">
+          <div><h2>Draft notice / FIR complaint</h2><small id="note" class="mut"></small></div>
+          <div class="tools">
+            <span id="tabs" class="tabs"></span>
+            <button class="ghost" id="editBtn" onclick="toggleEdit()">✏️ Edit</button>
+            <button class="ghost" onclick="copyDraft()">📋 Copy</button>
+            <button class="ghost" onclick="downloadDoc()">⬇️ .doc</button>
+            <button class="ghost" onclick="printDraft()">🖨️ Print</button>
+          </div>
+        </div>
+        <pre id="paper" class="paper"></pre>
+
+        <div id="hitl" class="hitl hidden">
+          <h3><i class="beacon"></i>Your turn: review the draft</h3>
+          <p>Approve it to get your action guide, or tell the writer what to change.</p>
+          <div class="chips">
+            <button onclick="clause(0)">+ Digital evidence certificate (Sec 63 BSA)</button>
+            <button onclick="clause(1)">+ Escalation if police refuse (BNSS 173(4))</button>
+            <button onclick="clause(2)">+ 15-day ultimatum with 18% interest</button>
+          </div>
+          <div class="hrow">
+            <input id="fb" placeholder="e.g. Add the bank UTR number placeholder and mention the 1930 complaint">
+            <button class="warn" onclick="sendHITL('rewrite')">Rewrite with this</button>
+            <button class="ok" onclick="sendHITL('approve')">Approve &amp; get guide</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="final" class="glass pad final hidden">
+        <div class="sh"><h2>Your action guide</h2>
+          <div class="tools"><button class="ghost" id="ttsBtn" onclick="speak()">🔊 Read aloud</button><button class="ghost" onclick="copyGuide()">📋 Copy</button><button class="ghost" onclick="window.print()">🖨️ Print</button></div>
+        </div>
+        <div id="guide" class="md"></div>
+      </div>
+    </section>
+  </div>
+</main>
+<div id="toasts"></div>
+<script src="/static/script.js"></script>
+</body>
+</html>
