@@ -5,6 +5,7 @@ langchain-groq
 langchain-community
 langchain-text-splitters
 langchain-tavily
+langchain-google-genai
 faiss-cpu
 pypdf
 python-dotenv
@@ -12,4 +13,3 @@ fastapi
 uvicorn
 python-multipart
 pydantic
-requests
