@@ -46,7 +46,7 @@ writer_llm_with_tools = ChatGroq(
 # 2. RAG RETRIEVERS (FAISS + Google Gemini Embeddings for 512MB RAM)
 # ==========================================
 # Uses Google AI Studio Gemini API for text-embedding-004 (Zero local RAM, Free Tier compatible)
-embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
+embeddings = GoogleGenerativeAIEmbeddings(model="embedding-001")
 
 DEFAULT_BNS_DOCS = [
     "Bharatiya Nyaya Sanhita (BNS) Section 318 (formerly IPC 420): Cheating and dishonestly inducing delivery of property is punishable with imprisonment up to 7 years and fine.",
