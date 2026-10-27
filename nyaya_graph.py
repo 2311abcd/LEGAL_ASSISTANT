@@ -1,5 +1,6 @@
 import os
 import json
+import requests
 from typing import TypedDict, Annotated
 from dotenv import load_dotenv
 
@@ -10,12 +11,12 @@ from langgraph.prebuilt import ToolNode
 from langgraph.types import interrupt
 from langgraph.checkpoint.memory import MemorySaver
 
-# LangChain & RAG Imports (From Video)
+# LangChain & RAG Imports (From Video - Lightweight for 512MB Render Deployment)
 from langchain_groq import ChatGroq
 from langchain_tavily import TavilySearch
+from langchain_core.embeddings import Embeddings
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 
 load_dotenv()
@@ -43,9 +44,38 @@ writer_llm_with_tools = ChatGroq(
 ).bind_tools(tools)
 
 # ==========================================
-# 2. RAG RETRIEVERS (FAISS + MiniLM)
+# 2. RAG RETRIEVERS (FAISS + MiniLM via API for 512MB RAM)
 # ==========================================
-embeddings = HuggingFaceEmbeddings(
+class HFInferenceAPIEmbeddings(Embeddings):
+    """Calls HuggingFace Serverless Inference API for sentence-transformers/all-MiniLM-L6-v2."""
+    def __init__(self, model_name: str = "sentence-transformers/all-MiniLM-L6-v2"):
+        self.model_name = model_name
+        self.api_key = os.getenv("HF_TOKEN", "")
+        self.api_url = (
+            f"https://router.huggingface.co/hf-inference/models/"
+            f"{self.model_name}/pipeline/feature-extraction"
+        )
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+        response = requests.post(
+            self.api_url,
+            headers=headers,
+            json={"inputs": texts, "options": {"wait_for_model": True}},
+            timeout=30
+        )
+        response.raise_for_status()
+        data = response.json()
+        if isinstance(data, list) and data and isinstance(data[0], list):
+            if data[0] and isinstance(data[0][0], list):
+                return [ item[0] for item in data ]
+            return data
+        raise ValueError(f"Unexpected embedding response format: {data}")
+
+    def embed_query(self, text: str) -> list[float]:
+        return self.embed_documents([text])[0]
+
+embeddings = HFInferenceAPIEmbeddings(
     model_name="sentence-transformers/all-MiniLM-L6-v2"
 )
 
@@ -75,8 +105,21 @@ def build_retriever(pdf_path: str, fallback_texts: list[str]):
         vector_store = FAISS.from_texts(fallback_texts, embeddings)
     return vector_store.as_retriever(search_kwargs={"k": 4})
 
-statutes_retriever = build_retriever("bns_handbook.pdf", DEFAULT_BNS_DOCS)
-procedures_retriever = build_retriever("legal_procedures.pdf", DEFAULT_PROCEDURE_DOCS)
+# Lazy-loaded retrievers so Uvicorn binds the port immediately on Render startup
+statutes_retriever = None
+procedures_retriever = None
+
+def get_statutes_retriever():
+    global statutes_retriever
+    if statutes_retriever is None:
+        statutes_retriever = build_retriever("bns_handbook.pdf", DEFAULT_BNS_DOCS)
+    return statutes_retriever
+
+def get_procedures_retriever():
+    global procedures_retriever
+    if procedures_retriever is None:
+        procedures_retriever = build_retriever("legal_procedures.pdf", DEFAULT_PROCEDURE_DOCS)
+    return procedures_retriever
 
 def reload_retrievers():
     global statutes_retriever, procedures_retriever
@@ -126,21 +169,21 @@ Return ONLY ONE WORD (statutes, procedures, or general)."""
 
 def statutes_rag_node(state: NyayaState) -> dict:
     """Retrieves chunks from BNS / Statutes PDF and generates structured Legal Audit in 1 fast call."""
-    docs = statutes_retriever.invoke(state["raw_query"])
+    docs = get_statutes_retriever().invoke(state["raw_query"])
     context = "\n\n".join([d.page_content for d in docs])
     audit = generate_single_shot_audit(state["case_category"], state["raw_query"], context)
     return {"retrieved_context": context, "legal_audit": audit}
 
 def procedures_rag_node(state: NyayaState) -> dict:
     """Retrieves chunks from Procedures PDF and generates structured Legal Audit in 1 fast call."""
-    docs = procedures_retriever.invoke(state["raw_query"])
+    docs = get_procedures_retriever().invoke(state["raw_query"])
     context = "\n\n".join([d.page_content for d in docs])
     audit = generate_single_shot_audit(state["case_category"], state["raw_query"], context)
     return {"retrieved_context": context, "legal_audit": audit}
 
 def general_context_node(state: NyayaState) -> dict:
     """Fallback general context + structured Legal Audit."""
-    docs = statutes_retriever.invoke(state["raw_query"])
+    docs = get_statutes_retriever().invoke(state["raw_query"])
     context = "\n\n".join([d.page_content for d in docs])
     audit = generate_single_shot_audit(state["case_category"], state["raw_query"], context)
     return {"retrieved_context": context, "legal_audit": audit}
