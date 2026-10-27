@@ -1,5 +1,6 @@
 import os
 import json
+import hashlib
 from typing import TypedDict, Annotated
 from dotenv import load_dotenv
 
@@ -13,7 +14,7 @@ from langgraph.checkpoint.memory import MemorySaver
 # LangChain & RAG Imports (From Video - Lightweight for 512MB Render Deployment)
 from langchain_groq import ChatGroq
 from langchain_tavily import TavilySearch
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_core.embeddings import Embeddings
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
@@ -43,10 +44,27 @@ writer_llm_with_tools = ChatGroq(
 ).bind_tools(tools)
 
 # ==========================================
-# 2. RAG RETRIEVERS (FAISS + Google Gemini Embeddings for 512MB RAM)
+# 2. RAG RETRIEVERS (FAISS + SimpleHashEmbeddings for 512MB RAM & Zero 404/Payment Errors)
 # ==========================================
-# Uses Google AI Studio Gemini API for text-embedding-004 (Zero local RAM, Free Tier compatible)
-embeddings = GoogleGenerativeAIEmbeddings(model="embedding-001")
+class SimpleHashEmbeddings(Embeddings):
+    """An ultra-lightweight, zero-API, zero-PyTorch embedding fallback for prototyping & demo."""
+    def _text_to_vector(self, text: str) -> list[float]:
+        # Generates a pseudo-random 384-dimensional vector based on text hash
+        hash_object = hashlib.sha256(text.encode())
+        hex_dig = hash_object.hexdigest()
+        vector = []
+        for i in range(0, 384):
+            char_code = ord(hex_dig[i % len(hex_dig)])
+            vector.append(float(char_code) / 255.0)
+        return vector
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [self._text_to_vector(text) for text in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._text_to_vector(text)
+
+embeddings = SimpleHashEmbeddings()
 
 DEFAULT_BNS_DOCS = [
     "Bharatiya Nyaya Sanhita (BNS) Section 318 (formerly IPC 420): Cheating and dishonestly inducing delivery of property is punishable with imprisonment up to 7 years and fine.",
@@ -204,7 +222,6 @@ def writer_node(state: NyayaState) -> dict:
 
     if is_returning_from_tool:
         msgs = state["messages"]
-        # Only send the CURRENT turn (last human prompt onward), not the whole history
         last_human = max((i for i, m in enumerate(msgs) if getattr(m, "type", "") == "human"), default=0)
         messages = [("system", WRITER_SYSTEM_PROMPT)] + [_trim_tool_msg(m) for m in msgs[last_human:]]
         response = writer_llm_with_tools.invoke(messages)
@@ -295,7 +312,6 @@ def should_switch_tool(state: NyayaState) -> str:
         return "tools"
     return "extract_draft"
 
-# Note: Keeping original function name if referenced elsewhere
 should_use_tool = should_switch_tool
 
 def should_stop_looping(state: NyayaState) -> str:
