@@ -1,11 +1,10 @@
 langgraph
 langchain
+langchain-core
 langchain-groq
 langchain-community
 langchain-text-splitters
-langchain-huggingface
 langchain-tavily
-sentence-transformers
 faiss-cpu
 pypdf
 python-dotenv
@@ -13,3 +12,4 @@ fastapi
 uvicorn
 python-multipart
 pydantic
+requests
